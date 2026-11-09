@@ -1,0 +1,651 @@
+<title>Bisco Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky header with three tabs; single column of ticket-stub cards and stat panels, two columns on wide screens */
+:root{
+  --bg:#f5f2fa; --surface:#ffffff; --ink:#1d1530; --muted:#6a6280; --line:#e3ddee;
+  --accent:#cf2d64; --accent-soft:#fbe3ec; --segue:#0e7f82; --segue-soft:#dcf2f1; --warn:#a2610b;
+  --display:"Bricolage Grotesque", "Arial Black", system-ui, sans-serif;
+  --body:"IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#130f1c; --surface:#1c1728; --ink:#efeaf9; --muted:#a39bb7; --line:#2f2842;
+  --accent:#ff5c8f; --accent-soft:#3a1a29; --segue:#43c7c4; --segue-soft:#14302f; --warn:#e7a54a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#130f1c; --surface:#1c1728; --ink:#efeaf9; --muted:#a39bb7; --line:#2f2842;
+  --accent:#ff5c8f; --accent-soft:#3a1a29; --segue:#43c7c4; --segue-soft:#14302f; --warn:#e7a54a; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:12px}
+h1{font:800 26px/1 var(--display);letter-spacing:-.02em;margin:0;display:flex;align-items:baseline;gap:6px}
+h1 .arrow{color:var(--accent)}
+nav{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px}
+nav a{font:600 13px var(--body);color:var(--muted);text-decoration:none;padding:7px 14px;border-radius:999px}
+nav a[aria-current="page"]{background:var(--ink);color:var(--bg)}
+nav a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main .wrap{padding-block:20px 48px;display:flex;flex-direction:column;gap:20px}
+.note{font-size:13px;color:var(--muted)}
+.banner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:var(--accent-soft);border-radius:10px;padding:10px 14px;font-size:14px}
+.banner b{font-weight:600}
+h2{font:800 20px/1.15 var(--display);margin:0;text-wrap:balance}
+h3{font:600 12px var(--body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button{font:600 14px var(--body);border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.ghost{border-color:transparent;background:none;color:var(--muted);padding:6px 8px}
+button.danger{color:var(--accent);border-color:var(--accent)}
+
+/* Stats */
+.figures{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.figures div{background:var(--surface);padding:14px}
+.figures b{display:block;font:800 30px/1 var(--display);font-variant-numeric:tabular-nums}
+.figures span{font-size:12px;color:var(--muted)}
+@media (max-width:560px){.figures{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+@media (max-width:720px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.bars{display:flex;flex-direction:column;gap:8px;list-style:none;margin:0;padding:0}
+.bars li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center}
+.bars .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.bars .track{grid-column:1/-1;height:6px;background:var(--line);border-radius:3px;display:flex;overflow:hidden}
+.bars .full{background:var(--accent)}
+.bars .part{background:var(--accent);opacity:.35}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--accent);margin-right:5px;vertical-align:-1px}
+.legend i.p{opacity:.35}
+.plain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.plain li{display:flex;justify-content:space-between;gap:10px}
+.plain li span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plain .mono{color:var(--muted);font-size:13px;flex-shrink:0}
+.seg{color:var(--segue);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:13px;border:1px dashed var(--muted);border-radius:999px;padding:3px 10px;color:var(--muted)}
+.years{display:flex;align-items:flex-end;gap:8px;height:110px;padding-top:16px}
+.years div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%;min-width:0}
+.years .b{width:100%;max-width:36px;background:var(--segue);border-radius:3px 3px 0 0}
+.years small{font:11px var(--mono);color:var(--muted)}
+.years em{font:500 11px var(--mono);font-style:normal}
+.tablebox{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font:600 11px var(--body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.n,td.n{text-align:right}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.song{cursor:pointer}
+tr.song:hover td{background:var(--bg)}
+tr.detail td{background:var(--bg);font-size:13px;color:var(--muted)}
+.search{width:100%;font:15px var(--body);padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);margin-bottom:10px}
+.tag{font:500 11px var(--mono);border-radius:4px;padding:1px 6px;margin-left:6px;white-space:nowrap;vertical-align:1px}
+.tag.part{background:var(--accent-soft);color:var(--accent)}
+.tag.pieced{background:var(--segue-soft);color:var(--segue)}
+
+/* Show stubs */
+.stubs{display:flex;flex-direction:column;gap:12px}
+.stub{display:grid;grid-template-columns:96px minmax(0,1fr);background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stub .date{background:var(--ink);color:var(--bg);padding:14px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  -webkit-mask:radial-gradient(circle at right 7px,transparent 4px,#000 4.5px) right/100% 14px repeat-y;mask:radial-gradient(circle at right 7px,transparent 4px,#000 4.5px) right/100% 14px repeat-y}
+.stub .date b{font:800 28px/1 var(--display)}
+.stub .date span{font:500 12px var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.stub .info{padding:12px 14px;min-width:0}
+.stub .venue{font-weight:600;font-size:16px}
+.stub .meta{font-size:13px;color:var(--muted)}
+.stub .actions{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;align-items:center}
+.setlist{margin-top:10px;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.setlist p{margin:0}
+.setlist .lbl{font:600 11px var(--body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block}
+.sep{color:var(--muted)}
+.sep.s{color:var(--segue);font-weight:600}
+
+/* Add form */
+form{display:flex;flex-direction:column;gap:14px}
+.row{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,1fr);gap:12px}
+@media (max-width:600px){.row{grid-template-columns:minmax(0,1fr)}}
+label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600}
+input,textarea{font:15px var(--body);padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+textarea{font-family:var(--mono);font-size:13px;min-height:170px;resize:vertical;line-height:1.6}
+.hint{font-size:13px;color:var(--muted);line-height:1.55}
+.hint code{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.hint a{color:var(--segue)}
+.formactions{display:flex;gap:8px;flex-wrap:wrap}
+.formhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.picker{display:flex;flex-direction:column;gap:12px}
+.picker h3{margin:6px 0 0}
+.yearbar{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+.yearbar button{flex:0 0 auto;font:500 14px var(--mono);font-variant-numeric:tabular-nums;padding:7px 12px;border-radius:999px;display:flex;align-items:baseline;gap:6px}
+.yearbar button small{font-size:11px;color:var(--accent)}
+.yearbar button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.yearbar button[aria-pressed="true"] small{color:var(--bg);opacity:.75}
+.picker .search{margin:0}
+.showlist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.showlist li+li{border-top:1px solid var(--line)}
+.showrow{width:100%;display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:12px;text-align:left;border:0;border-radius:0;padding:11px 12px;font-weight:400}
+.showrow:hover{background:var(--bg)}
+.showrow .d{font-size:14px;color:var(--muted)}
+.showrow .v{display:flex;flex-direction:column;min-width:0}
+.showrow .v b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.showrow .v span{font-size:13px;color:var(--muted)}
+.showrow .go{color:var(--accent);font-weight:600}
+.empty{text-align:center;padding:28px 16px;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.bars .full,.bars .part{transition:width .4s ease}}
+</style>
+
+<header><div class="wrap">
+  <h1>Bisco <span class="arrow">&gt;</span> Tracker</h1>
+  <nav aria-label="Sections">
+    <a href="#stats" data-view="stats">Stats</a>
+    <a href="#shows" data-view="shows">Shows</a>
+    <a href="#add" data-view="add">Add show</a>
+  </nav>
+</div></header>
+<main><div class="wrap" id="app"><p class="note">Loading your shows…</p></div></main>
+
+<script>
+const CATALOG = ["Above the Waves","Aceetobee","Air Song","Astronaut","Basis for a Day","Bernstein & Chasnoff","Caterpillar","Confrontation","Crickets","Digital Buddha","Floodlights","Helicopters","Highwire","Home Again","Hope","I-Man","Jigsaw Earth","Kitchen Mitts","Konkrete","Little Shiva","M.E.M.P.","Magellan","Mindless Dribble","Morph Dusseldorf","Mulberry's Dream","Munchkin Invasion","Orch Theme","Pat & Dex","Rock Candy","Run Like Hell","Save the Robots","Shem-Rah Boo","Spacebirdmatingcall","Spraypaint","Story of the World","Svenghali","The Overture","Tricycle","Triumph","Voices Insane"];
+const CANON = new Map(CATALOG.map(s=>[s.toLowerCase(),s]));
+
+const EXAMPLES = [
+  {id:"ex1",date:"2025-04-12",venue:"Example venue",city:"Philadelphia, PA",raw:"Set 1: Basis for a Day (inverted) > Mindless Dribble, Helicopters > Crickets\nSet 2: Shem-Rah Boo > Basis for a Day (ending) > Spacebirdmatingcall, Spraypaint\nEncore: Home Again"},
+  {id:"ex2",date:"2025-07-19",venue:"Example venue",city:"Morrison, CO",raw:"Set 1: Aceetobee, Little Shiva > Story of the World, Svenghali\nSet 2: Helicopters (beginning) > Morph Dusseldorf > Above the Waves > Crickets\nEncore: Mindless Dribble"},
+  {id:"ex3",date:"2025-12-30",venue:"Example venue",city:"Philadelphia, PA",raw:"Set 1: Caterpillar > Basis for a Day, Spraypaint > Floodlights\nSet 2: Crickets (dyslexic) > Konkrete > Magellan\nSet 3: Run Like Hell > Shem-Rah Boo\nEncore: Home Again"},
+  {id:"ex4",date:"2026-03-07",venue:"Example venue",city:"Brooklyn, NY",raw:"Set 1: Helicopters > Little Shiva, Mulberry's Dream > Crickets\nSet 2: Spacebirdmatingcall > Mindless Dribble > Aceetobee (unfinished)\nEncore: Basis for a Day"}
+];
+
+const DIRECTORY = `
+2026-10-31|The Palladium Downstairs|Worcester, MA
+2026-10-30|The Palladium Downstairs|Worcester, MA
+2026-10-29|Infinity Hall Hartford|Hartford, CT
+2026-10-28|Capitol Center for the Arts|Concord, NH
+2026-10-11|Middle Ages Brewing Company|Syracuse, NY
+2026-10-10|Town Ballroom|Buffalo, NY
+2026-10-09|Town Ballroom|Buffalo, NY
+2026-10-08|Paramount Theatre|Rutland, VT
+2026-10-03|Tropicana Showroom|Atlantic City, NJ
+2026-10-02|Tropicana Showroom|Atlantic City, NJ
+2026-09-26|The Sylvee|Madison, WI
+2026-09-25|Nocturnal Valley|French Village, MO
+2026-09-24|Madison Theater|Covington, KY
+2026-09-23|Saint Andrews Hall|Detroit, MI
+2026-09-02|The Charleston Pour House|Charleston, SC
+2026-09-01|The Charleston Pour House|Charleston, SC
+2026-08-31|Third Room|Asheville, NC
+2026-08-30|Third Room|Asheville, NC
+2026-08-29|Variety Playhouse|Atlanta, GA
+2026-08-07|Telluride Jazz Festival|Telluride, CO
+2026-07-26|Heuser Park|King of Prussia, PA
+2026-07-25|Heuser Park|King of Prussia, PA
+2026-07-24|Flood City Music Festival|Johnstown, PA
+2026-07-12|Soundcheck Studios|Pembroke, MA
+2026-07-11|Jeezum Crow Festival|Jay, VT
+2026-07-10|State Theatre|Portland, ME
+2026-07-09|Live at Madrid's (Tractorbeam)|Portland, ME
+2026-07-04|Borgata Event Center|Atlantic City, NJ
+2026-07-03|SPAC (with Goose)|Saratoga Springs, NY
+2026-06-21|Northlands Music & Arts Festival|Swanzey, NH
+2026-06-20|Lincoln Hill Farms|Canandaigua, NY
+2026-06-13|Levitt Pavilion|Westport, CT
+2026-06-12|Levitt Pavilion|Westport, CT
+2026-06-11|The Paramount|Huntington, NY
+2026-05-24|Mishawaka Amphitheatre|Bellvue, CO
+2026-05-23|Mishawaka Amphitheatre|Bellvue, CO
+2026-05-22|Mishawaka Amphitheatre|Bellvue, CO
+2026-05-07|Viva El Gonzo|San José del Cabo, Mexico
+2026-04-25|Brooklyn Bowl|Las Vegas, NV
+2026-04-24|Brooklyn Bowl|Las Vegas, NV
+2026-04-19|Crown Room at Crystal Bay Club|Crystal Bay, NV
+2026-04-18|The UC Theatre|Berkeley, CA
+2026-04-17|1015 Folsom (Tractorbeam)|San Francisco, CA
+2026-04-16|The Observatory North Park|San Diego, CA
+2026-04-12|Gather Outdoors|Stratton, VT
+2026-04-11|Gather Outdoors|Stratton, VT
+2026-03-19|Okeechobee Music & Arts Festival|Okeechobee, FL
+2026-02-08|Jam Cruise|Miami, FL
+2026-02-07|Jam Cruise|Miami, FL
+2026-02-06|Miami Beach Bandshell (Jam Cruise pre-party)|Miami Beach, FL
+2025-12-31|Roadrunner|Boston, MA
+2025-12-30|Royale|Boston, MA
+2025-12-29|The Sinclair|Cambridge, MA
+2025-12-28|District Music Hall|Norwalk, CT
+2025-12-27|College Street Music Hall|New Haven, CT
+2025-12-21|Thalia Hall|Chicago, IL
+2025-12-20|Thalia Hall|Chicago, IL
+2025-12-19|Garcia's Chicago|Chicago, IL
+2025-12-18|The Fillmore Minneapolis|Minneapolis, MN
+2025-11-22|Town Ballroom|Buffalo, NY
+2025-11-21|Town Ballroom|Buffalo, NY
+2025-11-20|Higher Ground|Burlington, VT
+2025-11-19|Higher Ground|Burlington, VT
+2025-11-16|Sherman Theater|Stroudsburg, PA
+2025-11-15|Brooklyn Steel|Brooklyn, NY
+2025-11-14|Brooklyn Steel|Brooklyn, NY
+2025-11-13|Elsewhere|Brooklyn, NY
+2025-11-08|9:30 Club|Washington, DC
+2025-11-07|The National|Richmond, VA
+2025-11-06|The NorVa|Norfolk, VA
+2025-11-05|Jefferson Theater|Charlottesville, VA
+2025-11-02|Brooklyn Bowl|Nashville, TN
+2025-10-31|Suwannee Hulaween|Live Oak, FL
+2025-09-07|Mishawaka Amphitheatre|Bellvue, CO
+2025-09-06|Mishawaka Amphitheatre|Bellvue, CO
+2025-09-05|Mishawaka Amphitheatre|Bellvue, CO
+2025-09-03|The LAWN at Surf Hotel|Buena Vista, CO
+2025-08-31|Pine Creek Lodge|Livingston, MT
+2025-08-30|Pine Creek Lodge|Livingston, MT
+2025-08-29|Pine Creek Lodge|Livingston, MT
+2025-08-27|The Complex|Salt Lake City, UT
+2025-08-24|Ardmore Music Hall|Ardmore, PA
+2025-08-23|Ardmore Music Hall|Ardmore, PA
+2025-08-22|Ardmore Music Hall|Ardmore, PA
+2025-08-21|Ardmore Music Hall|Ardmore, PA
+2025-08-20|Ardmore Music Hall|Ardmore, PA
+2025-08-19|Ardmore Music Hall|Ardmore, PA
+2025-07-13|Portland House of Music|Portland, ME
+2025-07-12|State Theatre|Portland, ME
+2025-07-11|The Strand Theatre|Providence, RI
+2025-07-10|Tree House Brewing Company|Deerfield, MA
+2025-07-09|Cape Cod Melody Tent|Hyannis, MA
+2025-07-06|White Eagle Hall|Jersey City, NJ
+2025-07-05|Borgata Music Box|Atlantic City, NJ
+2025-07-04|Borgata Music Box|Atlantic City, NJ
+2025-07-03|The Ave Live|Philadelphia, PA
+2025-07-02|XL Live|Harrisburg, PA
+2025-06-28|Levitt Pavilion|Westport, CT
+2025-06-27|Stage AE|Pittsburgh, PA
+2025-06-26|The Bluestone|Columbus, OH
+2025-06-25|HI-FI Annex|Indianapolis, IN
+2025-06-24|Mercury Ballroom|Louisville, KY
+2025-06-22|Peoria RiverFront|Peoria, IL
+2025-06-19|Camp Home Again|Woodstock, NY
+2025-06-18|Camp Home Again|Woodstock, NY
+2025-06-17|The Westcott Theater|Syracuse, NY
+2025-06-14|All Good Now|Columbia, MD
+2025-06-10|Lincoln Theatre|Raleigh, NC
+2025-06-07|French Broad River Brewery|Asheville, NC
+2025-06-06|French Broad River Brewery|Asheville, NC
+2025-06-05|Neighborhood Theatre|Charlotte, NC
+2025-06-04|Terminal West|Atlanta, GA
+2025-03-15|Starland Ballroom|Sayreville, NJ
+2025-03-14|Starland Ballroom|Sayreville, NJ
+2025-03-13|Main Hall at The Queen|Wilmington, DE
+2025-03-01|The Paramount|Huntington, NY
+2025-02-28|The Paramount|Huntington, NY
+2025-02-27|F.M. Kirby Center|Wilkes-Barre, PA
+2025-02-26|Bearsville Theater|Woodstock, NY
+2025-02-08|The Mission Ballroom|Denver, CO
+2025-02-07|Boulder Theater|Boulder, CO
+2025-02-05|Meow Wolf|Santa Fe, NM
+2025-02-04|Marquee Theatre|Tempe, AZ
+2025-02-02|Orpheum Theater|Flagstaff, AZ
+2025-02-01|The Sound|Del Mar, CA
+2025-01-31|Mayan Theatre|Los Angeles, CA
+2025-01-30|The Observatory|Santa Ana, CA
+2025-01-29|Fremont Theatre|San Luis Obispo, CA
+2025-01-26|Crown Room at Crystal Bay Club|Crystal Bay, NV
+2025-01-25|Crown Room at Crystal Bay Club|Crystal Bay, NV
+2025-01-24|The Warfield|San Francisco, CA
+2025-01-23|The Catalyst|Santa Cruz, CA
+2025-01-21|Senator Theatre|Chico, CA
+2025-01-19|Midtown Ballroom|Bend, OR
+2025-01-18|Revolution Hall|Portland, OR
+2025-01-17|Revolution Hall|Portland, OR
+2025-01-16|Showbox at the Market|Seattle, WA
+`.trim().split("\n").map(l=>{const [date,venue,city]=l.split("|");return {date,venue,city};});
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const canon = n => CANON.get(n.toLowerCase()) || n.replace(/\s+/g," ");
+const PARTIAL = /\((inverted|dyslexic|ending|end|beginning|begin|unfinished|partial|middle|reprise)\)/i;
+
+function parseSetlist(raw){
+  const sets=[];
+  for (let line of String(raw||"").split(/\n+/)){
+    line=line.trim(); if(!line) continue;
+    let label="";
+    const m=line.match(/^(set\s*[0-9ivx]+|encore\s*\d*|e\d*)\s*[:.\-–]\s*/i);
+    if(m){ label=m[1].replace(/^e(\d*)$/i,"Encore $1").replace(/^(\w)/,c=>c.toUpperCase()).trim(); line=line.slice(m[0].length); }
+    const parts=line.split(/\s*(->|→|>|,)\s*/);
+    const songs=[];
+    for(let i=0;i<parts.length;i+=2){
+      let tok=(parts[i]||"").trim(); if(!tok) continue;
+      const sep=parts[i+1]||"";
+      const pm=tok.match(PARTIAL);
+      tok=tok.replace(new RegExp(PARTIAL.source,"gi"),"").replace(/[*#^+]+$/,"").trim();
+      if(!tok) continue;
+      songs.push({name:canon(tok), partial:pm?pm[1].toLowerCase():null, segue:!!sep && sep!==","});
+    }
+    if(songs.length) sets.push({label:label||("Set "+(sets.length+1)), songs});
+  }
+  return sets;
+}
+
+function showSongs(sets){
+  const m=new Map();
+  for(const set of sets) for(const s of set.songs){
+    const k=s.name.toLowerCase();
+    const e=m.get(k)||{name:s.name,full:0,part:0};
+    s.partial?e.part++:e.full++; m.set(k,e);
+  }
+  for(const e of m.values()) e.status=e.full?"full":e.part>=2?"pieced":"partial";
+  return m;
+}
+
+function computeStats(shows){
+  const sorted=[...shows].sort((a,b)=>a.date.localeCompare(b.date));
+  const songs=new Map(), segues=new Map(), years=new Map(), venues=new Set();
+  let performances=0;
+  sorted.forEach((sh,idx)=>{
+    venues.add((sh.venue||"")+"|"+(sh.city||""));
+    const y=sh.date.slice(0,4); years.set(y,(years.get(y)||0)+1);
+    const sets=parseSetlist(sh.raw);
+    for(const set of sets){
+      performances+=set.songs.length;
+      set.songs.forEach((s,i)=>{ const nx=set.songs[i+1]; if(s.segue&&nx){ const k=s.name+"|"+nx.name; segues.set(k,(segues.get(k)||0)+1);} });
+    }
+    for(const [k,e] of showSongs(sets)){
+      const st=songs.get(k)||{name:e.name,shows:0,whole:0,partOnly:0,dates:[],lastIdx:-1};
+      st.shows++; e.status==="partial"?st.partOnly++:st.whole++;
+      st.dates.push({date:sh.date,status:e.status}); st.lastIdx=idx; songs.set(k,st);
+    }
+  });
+  const list=[...songs.values()].map(s=>({...s,gap:sorted.length-1-s.lastIdx,last:s.dates[s.dates.length-1].date}));
+  list.sort((a,b)=>b.shows-a.shows||b.whole-a.whole||a.name.localeCompare(b.name));
+  return {count:sorted.length, performances, venues:venues.size, list, segues:[...segues].sort((a,b)=>b[1]-a[1]),
+    years:[...years].sort((a,b)=>a[0].localeCompare(b[0])), heard:new Set(songs.keys())};
+}
+
+const fmtDate = d => { const [y,m,dd]=d.split("-").map(Number); return new Date(y,m-1,dd).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}); };
+const stubDate = d => { const [y,m,dd]=d.split("-").map(Number); const dt=new Date(y,m-1,dd); return {day:dd, mon:dt.toLocaleDateString(undefined,{month:"short"}), yr:y}; };
+
+/* ---------- storage ---------- */
+let shows=[], loaded=false, mode="local", col=null, notice="", openShow=null, openSong=null, editing=null, confirmDel=null, query="", pickYear=new Date().getFullYear(), pickQuery="", pickRows=[], centeredYear=0;
+const LS="bisco-tracker-shows";
+function lsLoad(){ try{ return JSON.parse(localStorage.getItem(LS)||"[]"); }catch(e){ return []; } }
+function lsSave(){ try{ localStorage.setItem(LS,JSON.stringify(shows)); }catch(e){} }
+function useLocal(msg){ mode="local"; shows=lsLoad(); loaded=true; notice=msg; render(); }
+
+async function boot(){
+  if(!window.claude||!window.claude.use){ useLocal("Saving on this device only."); return; }
+  const [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]);
+  const uid=user?await user.id():null;
+  if(!db||!uid){ useLocal("Sign in to keep your shows across devices. For now they save on this device only."); return; }
+  mode="db"; col=db.collection("data/users/"+uid);
+  const timer=setTimeout(()=>{ notice="Your shows can't be reached yet. Check your connection; this will update when it's back."; render(); },10000);
+  col.onSnapshot(snap=>{
+    if(!snap.metadata.fromCache){ clearTimeout(timer); notice=""; }
+    shows=snap.docs.map(d=>({id:d.id,...d.data()})); loaded=true; render();
+  }, err=>{ clearTimeout(timer); useLocal("Couldn't reach your saved shows ("+err.code+"). Saving on this device for now."); });
+}
+
+async function saveShow(data){
+  if(mode==="db"){
+    const ref=data.id?col.doc(data.id):col.doc();
+    const {id,...body}=data; await ref.set(body);
+  } else {
+    if(data.id) shows=shows.map(s=>s.id===data.id?data:s);
+    else shows.push({...data,id:"s"+Date.now().toString(36)});
+    lsSave(); render();
+  }
+}
+async function deleteShow(id){
+  if(mode==="db") await col.doc(id).delete();
+  else { shows=shows.filter(s=>s.id!==id); lsSave(); render(); }
+}
+
+/* ---------- BIP (Bisco Internet Project connector) ---------- */
+const BIP="Bisco internet project";
+let mcp=null, bipState="checking";
+const yearCache={};
+async function bootBip(){
+  if(!window.claude||!window.claude.use){ bipState="none"; render(); return; }
+  mcp=await window.claude.use("mcp"); bipState=mcp?"ready":"none";
+  if(mcp&&view()==="add") loadYear(pickYear);
+  render();
+}
+function bipErr(e){
+  const c=e&&e.code;
+  if(c==="server_not_connected"||c==="server_not_found") return {msg:"Add the Bisco Internet Project connector in claude.ai Settings → Connectors, then reopen this page.",retry:false};
+  if(c==="needs_reauth") return {msg:"Reconnect the Bisco Internet Project connector in claude.ai Settings → Connectors.",retry:false};
+  if(c==="selection_required") return {msg:"You have more than one BIP connector. Pick one when Claude asks, then try again.",retry:true};
+  if(c==="not_in_manifest"||c==="approval_required"||c==="consent_required") return {msg:"This page needs your OK to read shows from BIP.",retry:true,label:"Allow BIP"};
+  if(c==="blocked_by_policy") return {msg:"Your organization blocks this connector for you.",retry:false};
+  if(c==="server_unavailable"||c==="rate_limited") return {msg:"BIP isn't answering right now.",retry:true};
+  if(c==="tool_error") return {msg:"BIP couldn't return that. "+String(e.message||"").slice(0,140),retry:true};
+  if(c==="not_granted"||c==="capability_disabled"||c==="capability_removed") return {msg:"BIP can't be reached from this view.",retry:false};
+  return {msg:"Something went wrong reaching BIP.",retry:true};
+}
+async function loadYear(y){
+  if(!mcp) return;
+  const c=yearCache[y]; if(c&&(c.status==="ok"||c.status==="loading")) return;
+  yearCache[y]={status:"loading"}; render();
+  try{
+    const r=await mcp.callTool(BIP,"get_shows_by_year",{year:y,limit:500},{cache:{staleTime:86400000,gcTime:604800000}});
+    const list=(r.payload&&Array.isArray(r.payload.shows))?r.payload.shows:[];
+    yearCache[y]={status:"ok",rows:list.filter(x=>x&&x.date).map(x=>({date:x.date,venue:x.venueName||"Unknown venue",city:[x.venueCity,x.venueState].filter(Boolean).join(", "),slug:x.slug}))};
+  }catch(e){ yearCache[y]={status:"error",err:bipErr(e)}; }
+  render();
+}
+function setLabel(n,i){
+  const m=String(n||"").match(/^([SE])(\d*)$/i);
+  if(m) return m[1].toUpperCase()==="E" ? (m[2]&&m[2]!=="1"?"Encore "+m[2]:"Encore") : "Set "+(m[2]||1);
+  return /^(set\s*[0-9ivx]+|encore\s*\d*)$/i.test(String(n||"").trim()) ? String(n).trim() : "Set "+(i+1);
+}
+function partialTag(n){ const m=String(n||"").match(/inverted|dyslexic|unfinished|ending|beginning|partial/i); return m?m[0].toLowerCase():""; }
+function bipToRaw(p){
+  const sets=(p&&Array.isArray(p.sets))?p.sets:[];
+  return sets.map((set,si)=>{
+    const tr=[...(set.tracks||[])].filter(t=>t&&t.song).sort((a,b)=>(a.position||0)-(b.position||0));
+    if(!tr.length) return "";
+    return setLabel(set.name,si)+": "+tr.map((t,i)=>{ const tag=partialTag(t.notes); const sg=String(t.segue||"").trim();
+      return t.song+(tag?" ("+tag+")":"")+(i<tr.length-1?(sg&&sg!==","?" > ":", "):""); }).join("");
+  }).filter(Boolean).join("\n");
+}
+async function loadSetlist(slug){
+  if(!mcp||!editing) return;
+  editing.bip={status:"loading"}; render();
+  let next;
+  try{
+    const r=await mcp.callTool(BIP,"get_setlist",{slug},{cache:{staleTime:3600000,gcTime:604800000}});
+    const raw=bipToRaw(r.payload); next={status:raw?"ok":"empty",raw};
+  }catch(e){ next={status:"error",err:bipErr(e)}; }
+  if(!editing||editing.slug!==slug) return;
+  if(next.raw && !editing.raw) editing.raw=next.raw;
+  editing.bip={status:next.status,err:next.err}; render();
+}
+
+/* ---------- views ---------- */
+const view = () => ["stats","shows","add"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "stats";
+const usingExamples = () => loaded && shows.length===0;
+const data = () => usingExamples() ? EXAMPLES : shows;
+
+function setlistHTML(raw){
+  const sets=parseSetlist(raw);
+  if(!sets.length) return `<p class="note">No songs yet.</p>`;
+  return sets.map(set=>`<p><span class="lbl">${esc(set.label)}</span>${set.songs.map((s,i)=>
+    esc(s.name)+(s.partial?`<span class="tag part">${esc(s.partial)}</span>`:"")+
+    (i<set.songs.length-1?(s.segue?` <span class="sep s">&gt;</span> `:`<span class="sep">,</span> `):"")).join("")}</p>`).join("");
+}
+
+function statsView(){
+  const st=computeStats(data());
+  const top=st.list.slice(0,10), max=top[0]?top[0].shows:1;
+  const pieces=st.list.filter(s=>s.whole===0).slice(0,8);
+  const gaps=st.list.filter(s=>s.gap>0).sort((a,b)=>b.gap-a.gap).slice(0,6);
+  const chase=CATALOG.filter(s=>!st.heard.has(s.toLowerCase()));
+  const ymax=Math.max(1,...st.years.map(y=>y[1]));
+  const rows=st.list.filter(s=>!query||s.name.toLowerCase().includes(query.toLowerCase()));
+  return `
+  <div class="figures">
+    <div><b>${st.count}</b><span>shows</span></div>
+    <div><b>${st.list.length}</b><span>different songs</span></div>
+    <div><b>${st.performances}</b><span>songs heard in total</span></div>
+    <div><b>${st.venues}</b><span>venues</span></div>
+  </div>
+  <div class="grid">
+    <section class="panel"><h3>Most heard</h3>
+      <ol class="bars">${top.map(s=>`<li><span class="name">${esc(s.name)}</span><span class="mono">${s.shows}</span>
+        <span class="track"><span class="full" style="width:${s.whole/max*100}%"></span><span class="part" style="width:${s.partOnly/max*100}%"></span></span></li>`).join("")}</ol>
+      <div class="legend"><span><i></i>Full version</span><span><i class="p"></i>Only part of it</span></div>
+    </section>
+    <section class="panel"><h3>Favorite transitions</h3>
+      ${st.segues.length?`<ul class="plain">${st.segues.slice(0,6).map(([k,n])=>{const [a,b]=k.split("|");return `<li><span>${esc(a)} <span class="seg">&gt;</span> ${esc(b)}</span><span class="mono">×${n}</span></li>`}).join("")}</ul>`:`<p class="note">Segues you've heard show up here.</p>`}
+      <h3 style="margin-top:18px">Shows per year</h3>
+      <div class="years">${st.years.map(([y,n])=>`<div><em>${n}</em><span class="b" style="height:${n/ymax*70}px"></span><small>${y}</small></div>`).join("")}</div>
+    </section>
+    <section class="panel"><h3>Only heard in pieces</h3>
+      ${pieces.length?`<ul class="plain">${pieces.map(s=>`<li><span>${esc(s.name)}</span><span class="mono">${s.partOnly}× partial</span></li>`).join("")}</ul>
+      <p class="note" style="margin:10px 0 0">An inverted or unfinished song counts as whole when both halves land in the same show.</p>`:`<p class="note">You've heard a full version of everything you've caught.</p>`}
+    </section>
+    <section class="panel"><h3>Longest gaps</h3>
+      ${gaps.length?`<ul class="plain">${gaps.map(s=>`<li><span>${esc(s.name)}</span><span class="mono">${s.gap} show${s.gap>1?"s":""} ago</span></li>`).join("")}</ul>`:`<p class="note">Gaps appear once you've logged a few shows.</p>`}
+    </section>
+  </div>
+  <section class="panel"><h3>Chase list · ${chase.length} not caught yet</h3>
+    <div class="chips">${chase.map(s=>`<span class="chip">${esc(s)}</span>`).join("")}</div>
+    <p class="note" style="margin:10px 0 0">Checked against a starter list of ${CATALOG.length} songs.</p>
+  </section>
+  <section class="panel"><h3>Every song you've heard</h3>
+    <input class="search" id="songsearch" type="search" placeholder="Search songs" value="${esc(query)}">
+    <div class="tablebox"><table>
+      <thead><tr><th>Song</th><th class="n">Shows</th><th class="n">Full</th><th>Last heard</th><th class="n">Gap</th></tr></thead>
+      <tbody>${rows.map(s=>`<tr class="song" data-song="${esc(s.name)}"><td>${esc(s.name)}</td><td class="n mono">${s.shows}</td><td class="n mono">${s.whole}</td><td class="mono">${fmtDate(s.last)}</td><td class="n mono">${s.gap}</td></tr>`+
+        (openSong===s.name?`<tr class="detail"><td colspan="5">${s.dates.map(d=>fmtDate(d.date)+(d.status==="partial"?`<span class="tag part">partial</span>`:d.status==="pieced"?`<span class="tag pieced">pieced together</span>`:"")).join(" · ")}</td></tr>`:"")).join("")
+        || `<tr><td colspan="5" class="note">No songs match “${esc(query)}”.</td></tr>`}</tbody>
+    </table></div>
+  </section>`;
+}
+
+function showsView(){
+  const list=[...data()].sort((a,b)=>b.date.localeCompare(a.date));
+  if(!list.length) return `<div class="empty">No shows yet.</div>`;
+  return `<div class="stubs">${list.map(sh=>{ const d=stubDate(sh.date); const n=parseSetlist(sh.raw).reduce((a,s)=>a+s.songs.length,0); const ex=usingExamples();
+    return `<article class="stub"><div class="date"><span>${esc(d.mon)}</span><b>${d.day}</b><span>${d.yr}</span></div>
+    <div class="info"><div class="venue">${esc(sh.venue||"Unknown venue")}</div><div class="meta">${esc(sh.city||"")}${sh.city?" · ":""}${n} songs</div>
+    ${openShow===sh.id?`<div class="setlist">${setlistHTML(sh.raw)}</div>`:""}
+    <div class="actions"><button class="ghost" data-toggle="${esc(sh.id)}">${openShow===sh.id?"Hide setlist":"Show setlist"}</button>
+    ${ex?"":confirmDel===sh.id?`<span class="note">Delete this show?</span><button class="danger" data-del="${esc(sh.id)}">Delete</button><button class="ghost" data-nodel>Keep</button>`
+      :`<button class="ghost" data-edit="${esc(sh.id)}">Edit</button><button class="ghost" data-askdel="${esc(sh.id)}">Delete</button>`}</div></div></article>`; }).join("")}</div>`;
+}
+
+function directoryShows(year){
+  const m=new Map(), c=yearCache[year];
+  const base=(c&&c.status==="ok")?c.rows:DIRECTORY.filter(d=>+d.date.slice(0,4)===year);
+  for(const d of base) m.set(d.slug||(d.date+"|"+d.venue.toLowerCase()),{...d});
+  for(const s of shows){
+    if(+String(s.date).slice(0,4)!==year) continue;
+    let k=s.slug&&m.has(s.slug)?s.slug:null;
+    if(!k){ const dk=s.date+"|"+(s.venue||"").toLowerCase(); k=[...m.keys()].find(x=>{const r=m.get(x);return r.date===s.date&&(r.venue||"").toLowerCase()===(s.venue||"").toLowerCase();})||dk; }
+    m.set(k,{...(m.get(k)||{}),date:s.date,venue:s.venue||(m.get(k)||{}).venue||"Unknown venue",city:s.city||(m.get(k)||{}).city||"",logged:s.id});
+  }
+  return [...m.values()];
+}
+function pickerView(){
+  const all=directoryShows(pickYear), thisYear=new Date().getFullYear(), c=yearCache[pickYear];
+  const counts=new Map(); shows.forEach(s=>{const y=+String(s.date).slice(0,4);counts.set(y,(counts.get(y)||0)+1);});
+  const years=[]; for(let y=thisYear;y>=1995;y--) years.push(y);
+  let status="";
+  if(bipState==="checking"||(c&&c.status==="loading")) status=`<p class="note">Loading ${pickYear} shows from BIP…</p>`;
+  else if(c&&c.status==="error") status=`<div class="banner"><span>${esc(c.err.msg)}</span>${c.err.retry?`<button type="button" data-retryyear="${pickYear}">${esc(c.err.label||"Try again")}</button>`:""}</div>`;
+  else if(bipState==="none") status=`<p class="note">BIP can't be reached from this view, so only some years are listed. Open this page in the Claude app or on claude.ai to load every year.</p>`;
+  const q=pickQuery.toLowerCase();
+  const rows=all.filter(s=>+s.date.slice(0,4)===pickYear && (!q||(s.venue+" "+s.city).toLowerCase().includes(q))).sort((a,b)=>a.date.localeCompare(b.date));
+  pickRows=rows;
+  const months=new Map(); rows.forEach((s,i)=>{const mo=new Date(+s.date.slice(0,4),+s.date.slice(5,7)-1,1).toLocaleDateString(undefined,{month:"long"}); if(!months.has(mo)) months.set(mo,[]); months.get(mo).push([s,i]);});
+  return `<section class="panel picker">
+    <h2>Which show were you at?</h2>
+    <div class="yearbar" role="group" aria-label="Year">${years.map(y=>`<button type="button" data-year="${y}" aria-pressed="${y===pickYear}">${y}${counts.get(y)?`<small>${counts.get(y)}</small>`:""}</button>`).join("")}</div>
+    ${status}
+    <input class="search" id="pickquery" type="search" placeholder="Filter ${pickYear} by venue or city" value="${esc(pickQuery)}">
+    ${rows.length?[...months].map(([mo,list])=>`<h3>${esc(mo)}</h3><ul class="showlist">${list.map(([s,i])=>`<li><button type="button" class="showrow" data-pick="${i}">
+      <span class="d mono">${esc(s.date.slice(5).replace("-","/"))}</span><span class="v"><b>${esc(s.venue)}</b>${s.city?`<span>${esc(s.city)}</span>`:""}</span>${s.logged?`<span class="tag pieced">you were there</span>`:`<span class="go" aria-hidden="true">&gt;</span>`}</button></li>`).join("")}</ul>`).join("")
+      :(c&&c.status==="loading")||bipState==="checking"?"":`<div class="empty">${pickQuery?`No ${pickYear} shows match “${esc(pickQuery)}”.`:`No shows listed for ${pickYear}.`}</div>`}
+    <div class="formactions" style="margin-top:14px"><button type="button" id="manual">Not listed? Enter it yourself</button></div>
+    <p class="note" style="margin:10px 0 0">${c&&c.status==="ok"?"Shows and setlists from the Bisco Internet Project.":"Offline list: 2025 and 2026 from JamBase tour history."}</p>
+  </section>`;
+}
+
+function addView(){
+  if(!editing) return pickerView();
+  const s=editing;
+  const sfm="https://www.setlist.fm/search?query="+encodeURIComponent("Disco Biscuits "+(s.date||""));
+  return `<section class="panel"><form id="showform">
+    <div class="formhead"><h2>${s.id?"Edit show":s.date?fmtDate(s.date)+(s.venue?" · "+esc(s.venue):""):"Enter a show"}</h2>${s.id?"":`<button type="button" class="ghost" id="backpick">&lt; Pick a different show</button>`}</div>
+    ${s.bip?`<div class="${s.bip.status==="error"?"banner":"note"}">${s.bip.status==="loading"?"Pulling the setlist from BIP…":s.bip.status==="ok"?"Setlist pulled from BIP. Check it over, then add the show.":s.bip.status==="empty"?"BIP doesn't have a setlist for this show yet. You can type it in below.":`<span>${esc(s.bip.err.msg)}</span>${s.bip.err.retry?`<button type="button" id="retryset">${esc(s.bip.err.label||"Try again")}</button>`:""}`}</div>`:""}
+    <div class="row">
+      <label for="f-date">Date<input id="f-date" type="date" required value="${esc(s.date)}"></label>
+      <label for="f-venue">Venue<input id="f-venue" placeholder="The Fillmore" value="${esc(s.venue)}"></label>
+      <label for="f-city">City<input id="f-city" placeholder="Philadelphia, PA" value="${esc(s.city)}"></label>
+    </div>
+    <label for="f-raw">Setlist<textarea id="f-raw" placeholder="Set 1: Basis for a Day (inverted) > Mindless Dribble, Helicopters&#10;Set 2: Shem-Rah Boo > Basis for a Day (ending)&#10;Encore: Home Again">${esc(s.raw)}</textarea></label>
+    <p class="hint">One set per line. Use <code>&gt;</code> for a segue and a comma for a stop. Tag halves with <code>(inverted)</code>, <code>(dyslexic)</code>, <code>(beginning)</code>, <code>(ending)</code> or <code>(unfinished)</code>.
+      Or <a id="sfm" href="${esc(sfm)}" target="_blank" rel="noopener">find this date on setlist.fm</a>.</p>
+    <div class="panel" style="background:var(--bg)"><h3>Preview</h3><div class="setlist" id="preview" style="margin:0">${setlistHTML(s.raw)}</div></div>
+    <div class="formactions"><button class="primary" type="submit">${s.id?"Save changes":"Add show"}</button>${s.id?`<button type="button" id="cancel">Cancel</button>`:""}</div>
+    <p class="note" id="formmsg" role="status"></p>
+  </form></section>`;
+}
+
+function render(){
+  const v=view();
+  document.querySelectorAll("nav a").forEach(a=>{ if(a.dataset.view===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  const app=document.getElementById("app");
+  if(!loaded){ app.innerHTML=`<p class="note">Loading your shows…</p>${notice?`<p class="note">${esc(notice)}</p>`:""}`; return; }
+  let top="";
+  if(usingExamples() && v!=="add") top+=`<div class="banner"><span><b>These are example shows with made-up setlists.</b> Add your first show and your own stats replace them.</span><button class="primary" data-go="add">Add a show</button></div>`;
+  if(notice) top+=`<p class="note">${esc(notice)}</p>`;
+  const focusId=document.activeElement&&document.activeElement.id, sel=["songsearch","pickquery"].includes(focusId)?document.activeElement.selectionStart:null;
+  app.innerHTML=top+(v==="stats"?statsView():v==="shows"?showsView():addView());
+  if(sel!==null){ const el=document.getElementById(focusId); if(el) { el.focus(); try{el.setSelectionRange(sel,sel);}catch(e){} } }
+  if(v==="add"&&!editing&&centeredYear!==pickYear){ centeredYear=pickYear; const yb=document.querySelector('.yearbar [aria-pressed="true"]'); if(yb) yb.scrollIntoView({block:"nearest",inline:"center"}); }
+}
+
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-toggle],[data-edit],[data-askdel],[data-del],[data-nodel],[data-go],[data-year],[data-pick],[data-retryyear],tr.song,#cancel,#manual,#backpick,#retryset");
+  if(!t) return;
+  if(t.dataset.toggle){ openShow=openShow===t.dataset.toggle?null:t.dataset.toggle; render(); }
+  else if(t.dataset.edit){ editing={...shows.find(s=>s.id===t.dataset.edit)}; location.hash="add"; render(); }
+  else if(t.dataset.askdel){ confirmDel=t.dataset.askdel; render(); }
+  else if(t.hasAttribute("data-nodel")){ confirmDel=null; render(); }
+  else if(t.dataset.del){ const id=t.dataset.del; confirmDel=null; deleteShow(id).catch(()=>{ notice="That show couldn't be deleted. Try again in a moment."; render(); }); }
+  else if(t.dataset.go){ location.hash=t.dataset.go; }
+  else if(t.matches("tr.song")){ openSong=openSong===t.dataset.song?null:t.dataset.song; render(); }
+  else if(t.id==="cancel"){ editing=null; location.hash="shows"; }
+  else if(t.dataset.year){ pickYear=+t.dataset.year; pickQuery=""; render(); loadYear(pickYear); }
+  else if(t.dataset.retryyear){ const y=+t.dataset.retryyear; delete yearCache[y]; loadYear(y); }
+  else if(t.id==="retryset"){ if(editing&&editing.slug) loadSetlist(editing.slug); }
+  else if(t.dataset.pick){ const r=pickRows[+t.dataset.pick]; if(!r) return;
+    if(r.logged){ editing={...shows.find(s=>s.id===r.logged)}; render(); }
+    else { editing={date:r.date,venue:r.venue,city:r.city,raw:"",slug:r.slug||null}; render(); if(r.slug) loadSetlist(r.slug); }
+    window.scrollTo(0,0); }
+  else if(t.id==="manual"){ editing={date:"",venue:"",city:"",raw:""}; render(); }
+  else if(t.id==="backpick"){ editing=null; render(); }
+});
+document.addEventListener("input",e=>{
+  if(e.target.id==="songsearch"){ query=e.target.value; render(); }
+  if(e.target.id==="pickquery"){ pickQuery=e.target.value; render(); }
+  if(editing&&e.target.id&&e.target.id.startsWith("f-")){ editing[e.target.id.slice(2)]=e.target.value; }
+  if(e.target.id==="f-raw"){ document.getElementById("preview").innerHTML=setlistHTML(e.target.value); }
+  if(e.target.id==="f-date"){ document.getElementById("sfm").href="https://www.setlist.fm/search?query="+encodeURIComponent("Disco Biscuits "+e.target.value); }
+});
+document.addEventListener("submit",async e=>{
+  if(e.target.id!=="showform") return;
+  e.preventDefault();
+  const v=id=>document.getElementById(id).value.trim();
+  const rec={date:v("f-date"),venue:v("f-venue"),city:v("f-city"),raw:document.getElementById("f-raw").value.trim()};
+  const msg=document.getElementById("formmsg");
+  if(!rec.date){ msg.textContent="Pick the date of the show."; return; }
+  if(!parseSetlist(rec.raw).length){ msg.textContent="Add at least one song to the setlist."; return; }
+  if(editing&&editing.id) rec.id=editing.id;
+  if(editing&&editing.slug){ rec.slug=editing.slug; rec.source="bip"; }
+  msg.textContent="Saving…";
+  try{ await saveShow(rec); editing=null; openShow=null; location.hash="shows"; render(); }
+  catch(err){ msg.textContent="The show couldn't be saved. Check your connection and try again."; }
+});
+window.addEventListener("hashchange",()=>{ if(view()!=="add") editing=null; window.scrollTo(0,0); render(); if(view()==="add") loadYear(pickYear); });
+render();
+boot();
+bootBip();
+</script>
