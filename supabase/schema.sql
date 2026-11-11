@@ -53,3 +53,11 @@ create table if not exists public.bip_setlists (
 
 alter table public.bip_years enable row level security;
 alter table public.bip_setlists enable row level security;
+
+-- Explicit access, so this works even with "Automatically expose new tables" turned off.
+-- Signed-in people can reach their own shows (the policies above limit them to their rows);
+-- the cache tables are reachable only by the server.
+revoke all on public.user_shows from anon;
+grant select, insert, update, delete on public.user_shows to authenticated;
+revoke all on public.bip_years, public.bip_setlists from anon, authenticated;
+grant select, insert, update, delete on public.user_shows, public.bip_years, public.bip_setlists to service_role;
