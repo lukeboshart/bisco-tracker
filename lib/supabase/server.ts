@@ -27,7 +27,9 @@ export async function createClient() {
 
 // Server-only client for the BIP cache tables. Never import this from client code.
 export function createServiceClient() {
-  return createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.secret_key;
+  if (!key) throw new Error("Missing the Supabase secret key (SUPABASE_SERVICE_ROLE_KEY) in the server settings");
+  return createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
