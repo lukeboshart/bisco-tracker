@@ -61,3 +61,16 @@ revoke all on public.user_shows from anon;
 grant select, insert, update, delete on public.user_shows to authenticated;
 revoke all on public.bip_years, public.bip_setlists from anon, authenticated;
 grant select, insert, update, delete on public.user_shows, public.bip_years, public.bip_setlists to service_role;
+
+-- Cache of each song's full performance history from BIP (for bust-outs and rarity stats).
+create table if not exists public.bip_songs (
+  key           text primary key,
+  slug          text,
+  title         text,
+  times_played  int,
+  performances  jsonb not null default '[]'::jsonb,
+  fetched_at    timestamptz not null default now()
+);
+alter table public.bip_songs enable row level security;
+revoke all on public.bip_songs from anon, authenticated;
+grant select, insert, update, delete on public.bip_songs to service_role;

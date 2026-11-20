@@ -137,3 +137,49 @@ export const stubDate = (d: string) => {
   const dt = new Date(y, m - 1, dd);
   return { day: dd, mon: dt.toLocaleDateString(undefined, { month: "short" }), yr: y };
 };
+
+/* ---------- Bust-outs and rarity ---------- */
+
+export type BandShow = { date: string; slug: string | null };
+export type SongInfo = { slug: string; title: string; timesPlayed: number; performances: { d: string; s: string | null }[] };
+export type Bustout = { name: string; date: string; venue: string; gap: number; prevDate: string };
+
+export function computeRarities(shows: Show[], band: BandShow[], info: Record<string, SongInfo | null>) {
+  const bySlug = new Map<string, number>(), byDate = new Map<string, number>();
+  band.forEach((b, i) => {
+    if (b.slug) bySlug.set(b.slug, i);
+    if (!byDate.has(b.date)) byDate.set(b.date, i);
+  });
+  const indexOf = (slug: string | null, date: string) =>
+    (slug && bySlug.has(slug) ? bySlug.get(slug)! : byDate.has(date) ? byDate.get(date)! : -1);
+
+  const bustouts: Bustout[] = [];
+  const debuts: { name: string; date: string; venue: string }[] = [];
+  const heardTimes = new Map<string, { name: string; timesPlayed: number; heard: number }>();
+
+  for (const sh of [...shows].sort((a, b) => a.date.localeCompare(b.date))) {
+    const names = new Set(parseSetlist(sh.raw).flatMap((set) => set.songs.map((s) => s.name)));
+    for (const name of names) {
+      const inf = info[name];
+      if (!inf) continue;
+      const k = songKey(name);
+      const h = heardTimes.get(k) || { name, timesPlayed: inf.timesPlayed, heard: 0 };
+      h.heard++;
+      heardTimes.set(k, h);
+      const perfs = inf.performances;
+      const i = perfs.findIndex((p) => (sh.slug && p.s === sh.slug) || p.d === sh.date);
+      if (i < 0) continue;
+      const complete = perfs.length >= inf.timesPlayed;
+      if (i === 0) {
+        if (complete) debuts.push({ name, date: sh.date, venue: sh.venue });
+        continue;
+      }
+      const prev = perfs[i - 1];
+      const a = indexOf(prev.s, prev.d), b = indexOf(sh.slug, sh.date);
+      if (a >= 0 && b > a) bustouts.push({ name, date: sh.date, venue: sh.venue, gap: b - a - 1, prevDate: prev.d });
+    }
+  }
+  bustouts.sort((x, y) => y.gap - x.gap || y.date.localeCompare(x.date));
+  const rarest = [...heardTimes.values()].sort((x, y) => x.timesPlayed - y.timesPlayed || x.name.localeCompare(y.name));
+  return { bustouts, debuts, rarest };
+}

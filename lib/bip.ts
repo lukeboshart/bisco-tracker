@@ -91,3 +91,95 @@ export async function getSetlist(slug: string): Promise<{ raw: string }> {
     throw e;
   }
 }
+
+/* ---------- Bust-outs and rarity ---------- */
+
+export type BandShow = { date: string; slug: string | null };
+export type SongInfo = {
+  slug: string; title: string; timesPlayed: number;
+  performances: { d: string; s: string | null }[]; // every performance, oldest first, one per show
+};
+
+const FIRST_YEAR = 1995;
+
+async function pool<T, R>(items: T[], size: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (i < items.length) {
+      const n = i++;
+      out[n] = await fn(items[n]);
+    }
+  }));
+  return out;
+}
+
+// Every show the band has played, oldest first.
+export async function getAllShows(): Promise<BandShow[]> {
+  const years: number[] = [];
+  for (let y = FIRST_YEAR; y <= new Date().getFullYear(); y++) years.push(y);
+  const lists = await pool(years, 4, async (y) => {
+    try { return await getYear(y); } catch { return [] as DirectoryShow[]; }
+  });
+  return lists.flat().map((s) => ({ date: s.date, slug: s.slug })).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+const songKeyOf = (n: string) =>
+  n.toLowerCase().replace(/&/g, " and ").replace(/[‘’']/g, "").replace(/[^a-z0-9]+/g, "");
+
+async function fetchSong(name: string): Promise<SongInfo | null> {
+  const want = songKeyOf(name);
+  const queries = [...new Set([
+    name,
+    name.replace(/&/g, "and"),
+    name.replace(/[^A-Za-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2).slice(0, 2).join(" "),
+  ].map((q) => q.trim()).filter(Boolean))];
+  let hit: any = null;
+  for (const query of queries) {
+    const found = await callBip("search_songs", { query, limit: 20 });
+    const results: any[] = Array.isArray(found?.results) ? found.results : [];
+    hit = results.find((r) => songKeyOf(r.title || "") === want);
+    if (hit) break;
+  }
+  if (!hit) return null;
+  const [stats, perf] = await Promise.all([
+    callBip("get_song_statistics", { songSlug: hit.slug }).catch(() => null),
+    callBip("get_song_performances", { songSlug: hit.slug, limit: 500 }),
+  ]);
+  const seen = new Set<string>();
+  const performances = (Array.isArray(perf?.performances) ? perf.performances : [])
+    .map((p: any) => ({ d: String(p.showDate || "").slice(0, 10), s: p.showSlug || null }))
+    .filter((p: any) => p.d && !seen.has(p.s || p.d) && seen.add(p.s || p.d))
+    .sort((a: any, b: any) => a.d.localeCompare(b.d));
+  const timesPlayed = Number(stats?.statistics?.timesPlayed) || performances.length;
+  return { slug: hit.slug, title: hit.title, timesPlayed, performances };
+}
+
+// Song details for a batch of names, from the cache when fresh.
+export async function getSongs(names: string[]): Promise<Record<string, SongInfo | null>> {
+  const db = createServiceClient();
+  const keys = [...new Set(names.map(songKeyOf).filter(Boolean))];
+  const { data: rows } = await db.from("bip_songs").select("*").in("key", keys);
+  const cached = new Map((rows || []).map((r: any) => [r.key, r]));
+  const out: Record<string, SongInfo | null> = {};
+  await pool(names, 4, async (name) => {
+    const key = songKeyOf(name);
+    const row: any = cached.get(key);
+    const age = row ? Date.now() - new Date(row.fetched_at).getTime() : Infinity;
+    if (row && age < DAY) {
+      out[name] = row.slug ? { slug: row.slug, title: row.title, timesPlayed: row.times_played, performances: row.performances } : null;
+      return;
+    }
+    try {
+      const info = await fetchSong(name);
+      await db.from("bip_songs").upsert({
+        key, slug: info?.slug ?? null, title: info?.title ?? null, times_played: info?.timesPlayed ?? null,
+        performances: info?.performances ?? [], fetched_at: new Date().toISOString(),
+      });
+      out[name] = info;
+    } catch {
+      out[name] = row?.slug ? { slug: row.slug, title: row.title, timesPlayed: row.times_played, performances: row.performances } : null;
+    }
+  });
+  return out;
+}

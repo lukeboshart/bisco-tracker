@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  CATALOG, computeStats, songKey, fmtDate, parseSetlist, songCount, stubDate,
+  CATALOG, computeStats, songKey, computeRarities, type BandShow, type SongInfo, fmtDate, parseSetlist, songCount, stubDate,
   type DirectoryShow, type Show,
 } from "@/lib/setlist";
 
@@ -203,6 +203,7 @@ function Stats({ shows }: { shows: Show[] }) {
           ) : <p className="note">Gaps appear once you&rsquo;ve logged a few shows.</p>}
         </section>
       </div>
+      <Rarities shows={shows} names={st.list.map((s) => s.name)} />
       <section className="panel">
         <h3>Chase list · {chase.length} not caught yet</h3>
         <div className="chips">{chase.map((s) => <span key={s} className="chip">{s}</span>)}</div>
@@ -223,6 +224,107 @@ function Stats({ shows }: { shows: Show[] }) {
         </div>
       </section>
     </>
+  );
+}
+
+/* ---------------- Bust-outs and rarity ---------------- */
+
+function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
+  const [band, setBand] = useState<BandShow[] | null>(null);
+  const [info, setInfo] = useState<Record<string, SongInfo | null>>({});
+  const [done, setDone] = useState(0);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const key = [...names].sort().join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    setError("");
+    (async () => {
+      try {
+        const res = await fetch("/api/insights/shows");
+        const body = await res.json();
+        if (!res.ok) throw new Error();
+        if (!cancelled) setBand(body.shows);
+        const todo = names.filter((n) => !(n in info));
+        let count = names.length - todo.length;
+        if (!cancelled) setDone(count);
+        for (let i = 0; i < todo.length && !cancelled; i += 20) {
+          const batch = todo.slice(i, i + 20);
+          const r = await fetch("/api/insights/songs", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: batch }),
+          });
+          const b = await r.json();
+          if (!r.ok) throw new Error();
+          if (cancelled) return;
+          count += batch.length;
+          setInfo((m) => ({ ...m, ...b.songs }));
+          setDone(count);
+        }
+      } catch {
+        if (!cancelled) setError("BIP isn't answering right now, so bust-outs and rarities can't load.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [key, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const r = useMemo(() => (band ? computeRarities(shows, band, info) : null), [shows, band, info]);
+  const loading = !error && (!band || done < names.length);
+  const top = r ? r.bustouts.slice(0, 10) : [];
+  const rare = r ? r.rarest.slice(0, 10) : [];
+
+  return (
+    <section className="panel rarities">
+      <div className="formhead">
+        <h3 style={{ margin: 0 }}>Bust-outs &amp; rarities</h3>
+        {loading && <span className="note">Checking your songs against BIP… {done} of {names.length}</span>}
+      </div>
+      {error && (
+        <div className="banner"><span>{error}</span><button type="button" onClick={() => setAttempt((n) => n + 1)}>Try again</button></div>
+      )}
+      <div className="grid">
+        <div>
+          <h3>Biggest gaps you saw broken</h3>
+          {top.length ? (
+            <ol className="plain rank">
+              {top.map((b) => (
+                <li key={b.name + b.date}>
+                  <span>
+                    <b>{b.name}</b>{b.gap >= 50 && <span className="tag part">bust-out</span>}
+                    <small>{fmtDate(b.date)} · {b.venue || "Unknown venue"} · last played {fmtDate(b.prevDate)}</small>
+                  </span>
+                  <span className="mono">{b.gap} shows</span>
+                </li>
+              ))}
+            </ol>
+          ) : <p className="note">{loading ? "Working it out…" : "Gaps show up here once BIP has your songs' histories."}</p>}
+        </div>
+        <div>
+          <h3>Rarest songs you&rsquo;ve heard</h3>
+          {rare.length ? (
+            <ol className="plain rank">
+              {rare.map((s) => (
+                <li key={s.name}>
+                  <span><b>{s.name}</b><small>you&rsquo;ve heard it {s.heard === 1 ? "once" : s.heard + " times"}</small></span>
+                  <span className="mono">{s.timesPlayed}× ever</span>
+                </li>
+              ))}
+            </ol>
+          ) : <p className="note">{loading ? "Working it out…" : "Nothing to rank yet."}</p>}
+        </div>
+      </div>
+      {r && r.debuts.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 16 }}>Debuts you saw</h3>
+          <ul className="plain">
+            {r.debuts.map((d) => (
+              <li key={d.name + d.date}><span><b>{d.name}</b> <span className="note">first ever played</span></span><span className="mono">{fmtDate(d.date)}</span></li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="note" style={{ margin: "12px 0 0" }}>Gaps count the band&rsquo;s shows between the previous performance and the one you saw. Data from the Bisco Internet Project.</p>
+    </section>
   );
 }
 
