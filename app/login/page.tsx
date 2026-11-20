@@ -52,7 +52,7 @@ export default function Login() {
       if (mode === "signup") {
         if (password.length < 8) throw new Error("Use a password with at least 8 characters.");
         const { data, error } = await supabase.auth.signUp({
-          email, password, options: { emailRedirectTo: `${origin()}/` },
+          email, password, options: { emailRedirectTo: `${origin()}/auth/callback` },
         });
         if (error) throw error;
         if (data.session) { window.location.href = "/"; return; }
@@ -62,14 +62,14 @@ export default function Login() {
         setSent(`We sent a confirmation link to ${email}. Open it to finish creating your account.`);
       }
       if (mode === "link") {
-        const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${origin()}/` } });
+        const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${origin()}/auth/callback` } });
         if (error) throw error;
-        setSent(`Check ${email} for a sign-in link. It works once and expires in an hour.`);
+        setSent(`Check ${email} for a sign-in link. Open it in this same browser. It works once and expires in an hour.`);
       }
       if (mode === "forgot") {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin()}/account/password` });
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin()}/auth/callback?next=/account/password` });
         if (error) throw error;
-        setSent(`If ${email} has an account, a link to set a new password is on its way.`);
+        setSent(`If ${email} has an account, a link to set a new password is on its way. Open it in this same browser.`);
       }
     } catch (err: any) {
       setMsg(friendly(err?.message || "Something went wrong. Try again."));
