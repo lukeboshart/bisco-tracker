@@ -7,8 +7,12 @@ export type SetBlock = { label: string; songs: Song[] };
 
 // Starter list for the chase list. Replace with BIP's full catalog later.
 export const CATALOG = ["Above the Waves","Aceetobee","Air Song","Astronaut","Basis for a Day","Bernstein & Chasnoff","Caterpillar","Confrontation","Crickets","Digital Buddha","Floodlights","Helicopters","Highwire","Home Again","Hope","I-Man","Jigsaw Earth","Kitchen Mitts","Konkrete","Little Shiva","M.E.M.P.","Magellan","Mindless Dribble","Morph Dusseldorf","Mulberry's Dream","Munchkin Invasion","Orch Theme","Pat & Dex","Rock Candy","Run Like Hell","Save the Robots","Shem-Rah Boo","Spacebirdmatingcall","Spraypaint","Story of the World","Svenghali","The Overture","Tricycle","Triumph","Voices Insane"];
-const CANON = new Map(CATALOG.map((s) => [s.toLowerCase(), s]));
-const canon = (n: string) => CANON.get(n.toLowerCase()) || n.replace(/\s+/g, " ");
+// Matching key that ignores spelling differences like "&" vs "and", punctuation and spacing,
+// so "Pat & Dex" and "Pat and Dex" count as the same song.
+export const songKey = (n: string) =>
+  n.toLowerCase().replace(/&/g, " and ").replace(/[‘’']/g, "").replace(/[^a-z0-9]+/g, "");
+const CANON = new Map(CATALOG.map((s) => [songKey(s), s]));
+const canon = (n: string) => CANON.get(songKey(n)) || n.replace(/\s+/g, " ").trim();
 const PARTIAL = /\((inverted|dyslexic|ending|end|beginning|begin|unfinished|partial|middle|reprise)\)/i;
 
 export function parseSetlist(raw: string): SetBlock[] {
@@ -44,7 +48,7 @@ function showSongs(sets: SetBlock[]) {
   const m = new Map<string, { name: string; full: number; part: number; status?: string }>();
   for (const set of sets)
     for (const s of set.songs) {
-      const k = s.name.toLowerCase();
+      const k = songKey(s.name);
       const e = m.get(k) || { name: s.name, full: 0, part: 0 };
       s.partial ? e.part++ : e.full++;
       m.set(k, e);

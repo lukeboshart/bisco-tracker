@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  CATALOG, computeStats, fmtDate, parseSetlist, songCount, stubDate,
+  CATALOG, computeStats, songKey, fmtDate, parseSetlist, songCount, stubDate,
   type DirectoryShow, type Show,
 } from "@/lib/setlist";
 
@@ -138,7 +138,7 @@ function Stats({ shows }: { shows: Show[] }) {
   const top = st.list.slice(0, 10), max = top[0] ? top[0].shows : 1;
   const pieces = st.list.filter((s) => s.whole === 0).slice(0, 8);
   const gaps = st.list.filter((s) => s.gap > 0).sort((a, b) => b.gap - a.gap).slice(0, 6);
-  const chase = CATALOG.filter((s) => !st.heard.has(s.toLowerCase()));
+  const chase = CATALOG.filter((s) => !st.heard.has(songKey(s)));
   const ymax = Math.max(1, ...st.years.map((y) => y[1]));
   const rows = st.list.filter((s) => !query || s.name.toLowerCase().includes(query.toLowerCase()));
 
