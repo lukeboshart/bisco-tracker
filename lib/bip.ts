@@ -115,13 +115,17 @@ async function pool<T, R>(items: T[], size: number, fn: (t: T) => Promise<R>): P
 }
 
 // Every show the band has played, oldest first.
-export async function getAllShows(): Promise<BandShow[]> {
+// `missing` lists years BIP didn't answer for, so callers know the gaps may be short.
+export async function getAllShows(): Promise<{ shows: BandShow[]; missing: number[] }> {
   const years: number[] = [];
   for (let y = FIRST_YEAR; y <= new Date().getFullYear(); y++) years.push(y);
-  const lists = await pool(years, 4, async (y) => {
-    try { return await getYear(y); } catch { return [] as DirectoryShow[]; }
-  });
-  return lists.flat().map((s) => ({ date: s.date, slug: s.slug })).sort((a, b) => a.date.localeCompare(b.date));
+  const load = async (y: number) => { try { return await getYear(y); } catch { return null; } };
+  const lists = await pool(years, 3, load);
+  // One slower second try for any year that failed.
+  for (let i = 0; i < years.length; i++) if (!lists[i]) lists[i] = await load(years[i]);
+  const missing = years.filter((_, i) => !lists[i]);
+  const shows = lists.flatMap((l) => l || []).map((s) => ({ date: s.date, slug: s.slug })).sort((a, b) => a.date.localeCompare(b.date));
+  return { shows, missing };
 }
 
 const songKeyOf = (n: string) =>

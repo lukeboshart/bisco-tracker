@@ -8,8 +8,9 @@ export const maxDuration = 60;
 // Every show the band has played, used to measure gaps in shows.
 export async function GET() {
   try {
-    const shows = await getAllShows();
-    return NextResponse.json({ shows }, { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } });
+    const { shows, missing } = await getAllShows();
+    const cache = missing.length ? "no-store" : "public, s-maxage=3600, stale-while-revalidate=86400";
+    return NextResponse.json({ shows, missing }, { headers: { "Cache-Control": cache } });
   } catch {
     return NextResponse.json({ error: "BIP isn't answering right now." }, { status: 502 });
   }

@@ -231,6 +231,7 @@ function Stats({ shows }: { shows: Show[] }) {
 
 function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
   const [band, setBand] = useState<BandShow[] | null>(null);
+  const [missing, setMissing] = useState<number[]>([]);
   const [info, setInfo] = useState<Record<string, SongInfo | null>>({});
   const [done, setDone] = useState(0);
   const [error, setError] = useState("");
@@ -242,10 +243,10 @@ function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
     setError("");
     (async () => {
       try {
-        const res = await fetch("/api/insights/shows");
+        const res = await fetch("/api/insights/shows?v=2");
         const body = await res.json();
         if (!res.ok) throw new Error();
-        if (!cancelled) setBand(body.shows);
+        if (!cancelled) { setBand(body.shows); setMissing(body.missing || []); }
         const todo = names.filter((n) => !(n in info));
         let count = names.length - todo.length;
         if (!cancelled) setDone(count);
@@ -281,6 +282,9 @@ function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
       </div>
       {error && (
         <div className="banner"><span>{error}</span><button type="button" onClick={() => setAttempt((n) => n + 1)}>Try again</button></div>
+      )}
+      {missing.length > 0 && (
+        <div className="banner"><span>BIP didn&rsquo;t send the {missing.join(", ")} show list{missing.length > 1 ? "s" : ""}, so some gaps may read short.</span><button type="button" onClick={() => setAttempt((n) => n + 1)}>Try again</button></div>
       )}
       <div className="grid">
         <div>
