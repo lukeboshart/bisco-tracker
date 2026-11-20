@@ -68,6 +68,7 @@ create table if not exists public.bip_songs (
   slug          text,
   title         text,
   times_played  int,
+  first_played  date,
   performances  jsonb not null default '[]'::jsonb,
   fetched_at    timestamptz not null default now()
 );

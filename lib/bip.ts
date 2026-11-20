@@ -96,7 +96,7 @@ export async function getSetlist(slug: string): Promise<{ raw: string }> {
 
 export type BandShow = { date: string; slug: string | null };
 export type SongInfo = {
-  slug: string; title: string; timesPlayed: number;
+  slug: string; title: string; timesPlayed: number; firstPlayed: string | null;
   performances: { d: string; s: string | null }[]; // every performance, oldest first, one per show
 };
 
@@ -156,7 +156,9 @@ async function fetchSong(name: string): Promise<SongInfo | null> {
     .filter((p: any) => p.d && !seen.has(p.s || p.d) && seen.add(p.s || p.d))
     .sort((a: any, b: any) => a.d.localeCompare(b.d));
   const timesPlayed = Number(stats?.statistics?.timesPlayed) || performances.length;
-  return { slug: hit.slug, title: hit.title, timesPlayed, performances };
+  const first = String(stats?.statistics?.dateFirstPlayed || "").slice(0, 10);
+  const firstPlayed = first || (performances.length >= timesPlayed && performances[0] ? performances[0].d : null);
+  return { slug: hit.slug, title: hit.title, timesPlayed, firstPlayed, performances };
 }
 
 // Song details for a batch of names, from the cache when fresh.
@@ -170,19 +172,23 @@ export async function getSongs(names: string[]): Promise<Record<string, SongInfo
     const key = songKeyOf(name);
     const row: any = cached.get(key);
     const age = row ? Date.now() - new Date(row.fetched_at).getTime() : Infinity;
-    if (row && age < DAY) {
-      out[name] = row.slug ? { slug: row.slug, title: row.title, timesPlayed: row.times_played, performances: row.performances } : null;
+    const fromRow = (r: any): SongInfo => ({
+      slug: r.slug, title: r.title, timesPlayed: r.times_played, firstPlayed: r.first_played, performances: r.performances,
+    });
+    if (row && age < DAY && (!row.slug || row.first_played)) {
+      out[name] = row.slug ? fromRow(row) : null;
       return;
     }
     try {
       const info = await fetchSong(name);
       await db.from("bip_songs").upsert({
         key, slug: info?.slug ?? null, title: info?.title ?? null, times_played: info?.timesPlayed ?? null,
+        first_played: info?.firstPlayed ?? null,
         performances: info?.performances ?? [], fetched_at: new Date().toISOString(),
       });
       out[name] = info;
     } catch {
-      out[name] = row?.slug ? { slug: row.slug, title: row.title, timesPlayed: row.times_played, performances: row.performances } : null;
+      out[name] = row?.slug ? fromRow(row) : null;
     }
   });
   return out;

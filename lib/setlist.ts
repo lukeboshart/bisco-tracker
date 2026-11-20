@@ -141,7 +141,8 @@ export const stubDate = (d: string) => {
 /* ---------- Bust-outs and rarity ---------- */
 
 export type BandShow = { date: string; slug: string | null };
-export type SongInfo = { slug: string; title: string; timesPlayed: number; performances: { d: string; s: string | null }[] };
+export type SongInfo = { slug: string; title: string; timesPlayed: number; firstPlayed?: string | null; performances: { d: string; s: string | null }[] };
+export type Rarity = { name: string; timesPlayed: number; heard: number; debut: string; since: number; rate: number | null };
 export type Bustout = { name: string; date: string; venue: string; gap: number; prevDate: string };
 
 export function computeRarities(shows: Show[], band: BandShow[], info: Record<string, SongInfo | null>) {
@@ -155,7 +156,13 @@ export function computeRarities(shows: Show[], band: BandShow[], info: Record<st
 
   const bustouts: Bustout[] = [];
   const debuts: { name: string; date: string; venue: string }[] = [];
-  const heardTimes = new Map<string, { name: string; timesPlayed: number; heard: number }>();
+  const heardTimes = new Map<string, Rarity>();
+  // Number of band shows on or after a date (band is sorted oldest first).
+  const showsSince = (date: string) => {
+    let lo = 0, hi = band.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (band[mid].date < date) lo = mid + 1; else hi = mid; }
+    return band.length - lo;
+  };
 
   for (const sh of [...shows].sort((a, b) => a.date.localeCompare(b.date))) {
     const names = new Set(parseSetlist(sh.raw).flatMap((set) => set.songs.map((s) => s.name)));
@@ -163,7 +170,12 @@ export function computeRarities(shows: Show[], band: BandShow[], info: Record<st
       const inf = info[name];
       if (!inf) continue;
       const k = songKey(name);
-      const h = heardTimes.get(k) || { name, timesPlayed: inf.timesPlayed, heard: 0 };
+      let h = heardTimes.get(k);
+      if (!h) {
+        const debut = inf.firstPlayed || (inf.performances.length >= inf.timesPlayed ? inf.performances[0]?.d : "") || "";
+        const since = debut ? showsSince(debut) : 0;
+        h = { name, timesPlayed: inf.timesPlayed, heard: 0, debut, since, rate: since ? Math.min(1, inf.timesPlayed / since) : null };
+      }
       h.heard++;
       heardTimes.set(k, h);
       const perfs = inf.performances;
@@ -180,6 +192,8 @@ export function computeRarities(shows: Show[], band: BandShow[], info: Record<st
     }
   }
   bustouts.sort((x, y) => y.gap - x.gap || y.date.localeCompare(x.date));
-  const rarest = [...heardTimes.values()].sort((x, y) => x.timesPlayed - y.timesPlayed || x.name.localeCompare(y.name));
+  // Rarest = lowest share of shows played since the song's debut; songs without a known debut go last.
+  const rarest = [...heardTimes.values()].sort((x, y) =>
+    (x.rate ?? 2) - (y.rate ?? 2) || x.timesPlayed - y.timesPlayed || x.name.localeCompare(y.name));
   return { bustouts, debuts, rarest };
 }

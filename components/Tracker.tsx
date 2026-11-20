@@ -229,6 +229,8 @@ function Stats({ shows }: { shows: Show[] }) {
 
 /* ---------------- Bust-outs and rarity ---------------- */
 
+const pct = (r: number) => (r < 0.1 ? (r * 100).toFixed(1) : Math.round(r * 100).toString()) + "%";
+
 function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
   const [band, setBand] = useState<BandShow[] | null>(null);
   const [missing, setMissing] = useState<number[]>([]);
@@ -305,12 +307,19 @@ function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
         </div>
         <div>
           <h3>Rarest songs you&rsquo;ve heard</h3>
+          <p className="note" style={{ margin: "-4px 0 8px" }}>By how often it&rsquo;s played since its debut, so new songs aren&rsquo;t unfairly rare.</p>
           {rare.length ? (
             <ol className="plain rank">
               {rare.map((s) => (
                 <li key={s.name}>
-                  <span><b>{s.name}</b><small>you&rsquo;ve heard it {s.heard === 1 ? "once" : s.heard + " times"}</small></span>
-                  <span className="mono">{s.timesPlayed}× ever</span>
+                  <span>
+                    <b>{s.name}</b>
+                    <small>
+                      {s.timesPlayed} of {s.since ? s.since : "?"} shows since its {s.debut ? s.debut.slice(0, 4) : "unknown"} debut
+                      {" · "}you&rsquo;ve heard it {s.heard === 1 ? "once" : s.heard + " times"}
+                    </small>
+                  </span>
+                  <span className="mono">{s.rate === null ? "—" : pct(s.rate)}</span>
                 </li>
               ))}
             </ol>
