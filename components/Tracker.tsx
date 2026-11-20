@@ -236,6 +236,7 @@ function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
   const [missing, setMissing] = useState<number[]>([]);
   const [info, setInfo] = useState<Record<string, SongInfo | null>>({});
   const [done, setDone] = useState(0);
+  const [failed, setFailed] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const key = [...names].sort().join("|");
@@ -249,21 +250,26 @@ function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
         const body = await res.json();
         if (!res.ok) throw new Error();
         if (!cancelled) { setBand(body.shows); setMissing(body.missing || []); }
-        const todo = names.filter((n) => !(n in info));
-        let count = names.length - todo.length;
-        if (!cancelled) setDone(count);
-        for (let i = 0; i < todo.length && !cancelled; i += 20) {
-          const batch = todo.slice(i, i + 20);
-          const r = await fetch("/api/insights/songs", {
-            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: batch }),
-          });
-          const b = await r.json();
-          if (!r.ok) throw new Error();
-          if (cancelled) return;
-          count += batch.length;
-          setInfo((m) => ({ ...m, ...b.songs }));
-          setDone(count);
+        let todo = names.filter((n) => !(n in info));
+        if (!cancelled) { setDone(names.length - todo.length); setFailed([]); }
+        // Up to three passes: songs BIP couldn't answer for get another try after a pause.
+        for (let pass = 0; pass < 3 && todo.length && !cancelled; pass++) {
+          if (pass > 0) await new Promise((r) => setTimeout(r, 3000));
+          const retry: string[] = [];
+          for (let i = 0; i < todo.length && !cancelled; i += 10) {
+            const batch = todo.slice(i, i + 10);
+            const r = await fetch("/api/insights/songs", {
+              method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: batch }),
+            });
+            const b = r.ok ? await r.json() : { songs: {}, failed: batch };
+            if (cancelled) return;
+            retry.push(...(b.failed || []));
+            setInfo((m) => ({ ...m, ...b.songs }));
+            setDone((d) => d + batch.length - (b.failed || []).length);
+          }
+          todo = retry;
         }
+        if (!cancelled) setFailed(todo);
       } catch {
         if (!cancelled) setError("BIP isn't answering right now, so bust-outs and rarities can't load.");
       }
@@ -272,7 +278,7 @@ function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
   }, [key, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const r = useMemo(() => (band ? computeRarities(shows, band, info) : null), [shows, band, info]);
-  const loading = !error && (!band || done < names.length);
+  const loading = !error && (!band || done + failed.length < names.length);
   const top = r ? r.bustouts.slice(0, 10) : [];
   const rare = r ? r.rarest.slice(0, 10) : [];
 
@@ -284,6 +290,9 @@ function Rarities({ shows, names }: { shows: Show[]; names: string[] }) {
       </div>
       {error && (
         <div className="banner"><span>{error}</span><button type="button" onClick={() => setAttempt((n) => n + 1)}>Try again</button></div>
+      )}
+      {!loading && failed.length > 0 && (
+        <div className="banner"><span>BIP didn&rsquo;t answer for {failed.length} song{failed.length > 1 ? "s" : ""}, so they&rsquo;re left out below.</span><button type="button" onClick={() => setAttempt((n) => n + 1)}>Try again</button></div>
       )}
       {missing.length > 0 && (
         <div className="banner"><span>BIP didn&rsquo;t send the {missing.join(", ")} show list{missing.length > 1 ? "s" : ""}, so some gaps may read short.</span><button type="button" onClick={() => setAttempt((n) => n + 1)}>Try again</button></div>

@@ -15,32 +15,56 @@ export class BipError extends Error {
 }
 
 // One call to a tool on the Bisco Internet Project MCP server.
-async function callBip(tool: string, args: Record<string, unknown>): Promise<any> {
-  const client = new Client({ name: "bisco-tracker", version: "1.0.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(BIP_URL));
-  try {
-    await client.connect(transport);
-    const res: any = await client.callTool({ name: tool, arguments: args });
-    const text = Array.isArray(res?.content) ? res.content.find((c: any) => c.type === "text")?.text : undefined;
-    if (res?.isError) throw new BipError(text || "BIP reported an error");
-    let payload = res?.structuredContent;
-    if (payload === undefined && text) {
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        throw new BipError("BIP returned something unexpected");
-      }
-    }
-    if (payload && typeof payload === "object" && "error" in payload) {
-      throw new BipError(String((payload as any).error), 404);
-    }
-    return payload;
-  } catch (e) {
-    if (e instanceof BipError) throw e;
-    throw new BipError("BIP isn't answering right now");
-  } finally {
-    await client.close().catch(() => {});
+// One shared connection to BIP's MCP server, reused across calls (and across requests while the
+// server stays warm). Opening a fresh connection per call made BIP turn many of them away.
+let shared: Promise<Client> | null = null;
+
+function connect(): Promise<Client> {
+  if (!shared) {
+    const p = (async () => {
+      const client = new Client({ name: "bisco-tracker", version: "1.0.0" });
+      await client.connect(new StreamableHTTPClientTransport(new URL(BIP_URL)));
+      return client;
+    })();
+    shared = p;
+    p.catch(() => { if (shared === p) shared = null; });
   }
+  return shared;
+}
+
+function reset(failed: Promise<Client>) {
+  if (shared === failed) {
+    shared = null;
+    failed.then((c) => c.close()).catch(() => {});
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function callBip(tool: string, args: Record<string, unknown>, tries = 3): Promise<any> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    const conn = connect();
+    try {
+      const client = await conn;
+      const res: any = await client.callTool({ name: tool, arguments: args });
+      const text = Array.isArray(res?.content) ? res.content.find((c: any) => c.type === "text")?.text : undefined;
+      if (res?.isError) throw new Error(text || "BIP reported an error");
+      let payload = res?.structuredContent;
+      if (payload === undefined && text) payload = JSON.parse(text);
+      if (payload && typeof payload === "object" && "error" in payload) {
+        throw new BipError(String((payload as any).error), 404); // a real "not found": don't retry
+      }
+      return payload;
+    } catch (e) {
+      if (e instanceof BipError && e.status === 404) throw e;
+      lastError = e;
+      console.error(`[bip] ${tool} failed (try ${attempt + 1}/${tries}):`, (e as any)?.message || e);
+      reset(conn);
+      if (attempt < tries - 1) await sleep(500 * 2 ** attempt);
+    }
+  }
+  throw new BipError("BIP isn't answering right now: " + ((lastError as any)?.message || "unknown error"));
 }
 
 function yearMaxAge(year: number) {
@@ -162,13 +186,15 @@ async function fetchSong(name: string): Promise<SongInfo | null> {
 }
 
 // Song details for a batch of names, from the cache when fresh.
-export async function getSongs(names: string[]): Promise<Record<string, SongInfo | null>> {
+// Songs BIP couldn't be reached for are left out of `songs` and listed in `failed`.
+export async function getSongs(names: string[]): Promise<{ songs: Record<string, SongInfo | null>; failed: string[] }> {
   const db = createServiceClient();
   const keys = [...new Set(names.map(songKeyOf).filter(Boolean))];
   const { data: rows } = await db.from("bip_songs").select("*").in("key", keys);
   const cached = new Map((rows || []).map((r: any) => [r.key, r]));
   const out: Record<string, SongInfo | null> = {};
-  await pool(names, 4, async (name) => {
+  const failed: string[] = [];
+  await pool(names, 2, async (name) => {
     const key = songKeyOf(name);
     const row: any = cached.get(key);
     const age = row ? Date.now() - new Date(row.fetched_at).getTime() : Infinity;
@@ -187,9 +213,11 @@ export async function getSongs(names: string[]): Promise<Record<string, SongInfo
         performances: info?.performances ?? [], fetched_at: new Date().toISOString(),
       });
       out[name] = info;
-    } catch {
-      out[name] = row?.slug ? fromRow(row) : null;
+    } catch (e) {
+      console.error(`[bip] couldn't look up "${name}":`, (e as any)?.message || e);
+      if (row?.slug) out[name] = fromRow(row);
+      else failed.push(name);
     }
   });
-  return out;
+  return { songs: out, failed };
 }

@@ -22,8 +22,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Send 1 to 20 song names." }, { status: 400 });
   }
   try {
-    const songs = await getSongs(names as string[]);
-    return NextResponse.json({ songs });
+    const { songs, failed } = await getSongs(names as string[]);
+    return NextResponse.json({ songs, failed });
   } catch {
     return NextResponse.json({ error: "BIP isn't answering right now." }, { status: 502 });
   }
