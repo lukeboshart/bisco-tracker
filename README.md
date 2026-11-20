@@ -66,6 +66,19 @@ In Supabase, open **Authentication → URL Configuration**:
 - **Site URL:** `https://yourdomain.com`
 - **Redirect URLs:** add `https://yourdomain.com/auth/callback`
 
+### 5b. Make email links work in any browser
+
+In Supabase, open **Authentication → Emails → Templates** and replace the link in three templates.
+These links work even when someone opens the email on a different device or in their email app's browser.
+
+| Template | Replace the link's address with |
+| --- | --- |
+| Confirm signup | `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email` |
+| Magic link | `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email` |
+| Reset password | `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery` |
+
+Sign-in with email + password is on by default (**Authentication → Sign In / Providers → Email**).
+
 ### 6. Send sign-in emails from your domain
 
 Supabase's built-in email only sends a few messages an hour, which isn't enough for a public site.
@@ -82,7 +95,9 @@ Supabase's built-in email only sends a few messages an hour, which isn't enough 
 2. Under **Authorized redirect URIs**, add the callback URL that Supabase shows under **Authentication → Sign In / Providers → Google**.
 3. Paste the Google client ID and secret into that Supabase page and turn Google on.
 
-Until you do this, the Google button says it isn't set up and people use the email link.
+4. In Vercel, add the environment variable `NEXT_PUBLIC_GOOGLE_SIGNIN` with the value `on`, then redeploy.
+
+The Google button stays hidden until you do this.
 
 ---
 
@@ -90,6 +105,7 @@ Until you do this, the Google button says it isn't set up and people use the ema
 
 - Contact BIP through the form on [discobiscuits.net](https://discobiscuits.net). Their terms rule out commercial use, and the MCP server is a beta. Ask if they're happy with a public tracker using it.
 - Sign up with a second email address and confirm that it can't see your shows.
+- Upgrade Supabase to Pro. Free projects pause after a week without visitors, and sign-in stops working until someone restores them.
 
 ## Run it on your computer (optional)
 

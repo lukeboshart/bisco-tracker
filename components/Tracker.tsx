@@ -87,6 +87,7 @@ export default function Tracker({ email }: { email: string }) {
           </nav>
           <div className="who">
             <span>{email}</span>
+            <a href="/account/password">Change password</a>
             <button type="button" className="ghost" onClick={signOut}>Sign out</button>
           </div>
         </div>
